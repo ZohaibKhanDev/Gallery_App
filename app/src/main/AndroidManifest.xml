@@ -25,6 +25,14 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.ALL_APPS"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:host="image/*"
+                    android:scheme="http"
+                    tools:ignore="AppLinkUrlError" />
+            </intent-filter>
         </activity>
     </application>
 

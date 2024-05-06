@@ -4,15 +4,20 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ContentUris
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,8 +42,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -75,21 +78,22 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.example.galleryapp.ui.theme.GalleryAppTheme
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class MainActivity : ComponentActivity() {
     private var photosItems: List<String> by mutableStateOf(emptyList())
+
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             GalleryAppTheme {
-                val calendar = Calendar.getInstance()
-                calendar.time = Date()
-                val toDate = calendar.timeInMillis
-                calendar.add(Calendar.DAY_OF_MONTH, -1)
-                val fromDate = calendar.timeInMillis
+
                 NavEntry()
 
             }
@@ -140,6 +144,14 @@ class MainActivity : ComponentActivity() {
     }
 
 
+    fun convertTimeToString(timestamp: Long): String {
+        val timestamp = System.currentTimeMillis()
+        val date = Date(timestamp)
+        val format = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault())
+        return format.format(date)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
     @OptIn(ExperimentalMaterial3Api::class)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @Composable
@@ -184,6 +196,8 @@ class MainActivity : ComponentActivity() {
 
             })
         }) {
+
+
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 modifier = Modifier
@@ -192,6 +206,7 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(24.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
+
                 items(photos) { photo ->
                     AsyncImage(
                         model = photo,
@@ -211,12 +226,13 @@ class MainActivity : ComponentActivity() {
                         contentScale = ContentScale.Crop,
                     )
                 }
-
             }
         }
+
     }
 
 
+    @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun Navigation(navController: NavHostController) {
         NavHost(navController = navController, startDestination = Screen.Photos.route) {
@@ -245,19 +261,33 @@ class MainActivity : ComponentActivity() {
 
     }
 
-    fun performDeletion(context: Context, imageUri: Uri) {
-        try {
-            val contentResolver = context.contentResolver
-            // Delete the image from the content provider
-            val deletedRows = contentResolver.delete(imageUri, null, null)
-            if (deletedRows > 0) {
-                Log.d("DeletionSuccess", "Image deleted successfully")
-            } else {
-                Log.d("DeletionFailure", "No image deleted")
+    fun performDeletion(context: Context, imageUri: Uri?) {
+        imageUri?.let {
+            try {
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    // Permission not granted, inform the user
+                    Toast.makeText(
+                        context,
+                        "Permission denied. Cannot delete image.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return
+                }
+
+                val contentResolver = context.contentResolver
+                val deletedRows = contentResolver.delete(imageUri, null, null)
+                if (deletedRows > 0) {
+                    Log.d("DeletionSuccess", "Image deleted successfully")
+                } else {
+                    Log.e("DeletionError", "No image deleted")
+                }
+            } catch (e: Exception) {
+                Log.e("DeletionError", "Error deleting image: ${e.message}")
             }
-        } catch (e: Exception) {
-            // Handle any exceptions that may occur during deletion
-            Log.e("DeletionError", "Error deleting image: ${e.message}")
         }
     }
 
@@ -267,6 +297,8 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun DetailScreen(navController: NavController, pic: String?) {
         val context = LocalContext.current
+
+
         Scaffold(topBar = {
             TopAppBar(title = {
                 Icon(
@@ -306,6 +338,29 @@ class MainActivity : ComponentActivity() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
+                        modifier = Modifier.clickable {
+                            val sendIntent: Intent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, "$pic")
+                                type = "image/*"
+                            }
+
+                            val shareIntentActivities: List<ResolveInfo> =
+                                context.packageManager.queryIntentActivities(
+                                    sendIntent,
+                                    PackageManager.MATCH_DEFAULT_ONLY
+                                )
+
+                            if (shareIntentActivities.isNotEmpty()) {
+                                context.startActivity(Intent.createChooser(sendIntent, "Share"))
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "No app available to handle share action",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
                         horizontalAlignment = Alignment.Start,
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
@@ -315,8 +370,14 @@ class MainActivity : ComponentActivity() {
                             tint = Color.White
                         )
 
-                        Text(text = "Share", fontSize = 9.sp, color = Color.White)
+                        Text(
+                            text = "Share",
+                            fontSize = 9.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
+
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -328,7 +389,12 @@ class MainActivity : ComponentActivity() {
                             tint = Color.White
                         )
 
-                        Text(text = "Favourite", fontSize = 9.sp, color = Color.White)
+                        Text(
+                            text = "Favourite",
+                            fontSize = 9.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
 
                     Column(
@@ -341,12 +407,25 @@ class MainActivity : ComponentActivity() {
                             tint = Color.White
                         )
 
-                        Text(text = "Edit", fontSize = 9.sp, color = Color.White)
+                        Text(
+                            text = "Edit",
+                            fontSize = 9.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
 
                     Column(
                         modifier = Modifier.clickable {
-                            performDeletion(context, Uri.parse(pic))
+                            if (ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                performDeletion(context, Uri.parse(pic))
+                            } else {
+                                registerActivityResult.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            }
                         },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -357,7 +436,12 @@ class MainActivity : ComponentActivity() {
                             tint = Color.White
                         )
 
-                        Text(text = "Delete", fontSize = 9.sp, color = Color.White)
+                        Text(
+                            text = "Delete",
+                            fontSize = 9.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
 
                     Column(
@@ -370,7 +454,12 @@ class MainActivity : ComponentActivity() {
                             tint = Color.White
                         )
 
-                        Text(text = "More", fontSize = 9.sp, color = Color.White)
+                        Text(
+                            text = "More",
+                            fontSize = 9.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
 
@@ -418,6 +507,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @Composable
     fun NavEntry() {
@@ -438,8 +528,8 @@ class MainActivity : ComponentActivity() {
 
     }
 
-}
 
+}
 
 inline fun permissionGaranted(context: Context, permission: String, call: (Boolean) -> Unit) {
     if (ContextCompat.checkSelfPermission(
