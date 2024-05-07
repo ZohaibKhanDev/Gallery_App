@@ -43,4 +43,11 @@ sealed class Screen(
         selectedIcon = Icons.Filled.Explore,
         unSelectedIcon = Icons.Outlined.Explore
     )
+
+    object VideoDetail : Screen(
+        "VideoDetail",
+        "VideoDetail",
+        selectedIcon = Icons.Filled.Explore,
+        unSelectedIcon = Icons.Outlined.Explore
+    )
 }
