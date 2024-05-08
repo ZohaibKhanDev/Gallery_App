@@ -16,7 +16,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
-import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -37,7 +36,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -123,13 +121,14 @@ class MainActivity : ComponentActivity() {
         requestPermission()
     }
 
+
     fun requestPermission() {
-        permissionGaranted(this, Manifest.permission.READ_MEDIA_IMAGES) {
+        permissionGaranted(this, Manifest.permission.READ_MEDIA_VIDEO) {
             if (it) {
 
                 photosItems = getPhotosList(applicationContext)
             } else {
-                registerActivityResult.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                registerActivityResult.launch(Manifest.permission.READ_MEDIA_VIDEO)
             }
         }
     }
@@ -143,52 +142,54 @@ class MainActivity : ComponentActivity() {
 
 
     fun getPhotosList(context: Context): List<String> {
-        val photosList = mutableListOf<String>()
-        val videosList = mutableListOf<String>()
-        val projection = arrayOf(MediaStore.Images.Media._ID)
-        val videosProjection = arrayOf(MediaStore.Video.Media._ID)
-
+        val mediaList = mutableListOf<String>()
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE
+        )
         val contentResolver = context.contentResolver
         val cursor = contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, null
+            MediaStore.Files.getContentUri("external"),
+            projection,
+            null,
+            null,
+            null
         )
 
-        for (item in photosItems) {
-            val pair = item.split(",")
-            val uri = pair[0].substring(1) // Removing the leading "("
-            val type = pair[1].substring(0, pair[1].length - 1) // Removing the trailing ")"
-            if (type == "video") {
-                videosList.add(uri)
-            } else {
-                photosList.add(uri)
-            }
-        }
         cursor?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             while (cursor.moveToNext()) {
-                val photoId = cursor.getLong(idColumn)
-                val photoUri = ContentUris.withAppendedId(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, photoId
+                val mediaId = cursor.getLong(idColumn)
+                val mediaUri = ContentUris.withAppendedId(
+                    MediaStore.Files.getContentUri("external"),
+                    mediaId
                 )
-                photosList.add(photoUri.toString())
+                mediaList.add((mediaUri).toString())
             }
-        }
 
-        context.contentResolver.query(
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, videosProjection, null, null, null
-        )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-            while (cursor.moveToNext()) {
-                val videoId = cursor.getLong(idColumn)
-                val videoUri = ContentUris.withAppendedId(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI, videoId
-                )
-                videosList.add(Pair(videoUri.toString(), "video").toString())
-            }
+
         }
 
 
-        return photosList
+        /*cursorVideos?.use {
+            val idColumVideo = cursor?.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val videosId = idColumVideo?.let { cursor.getLong(it) }
+            val videosUri = videosId?.let {
+                ContentUris.withAppendedId(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    it
+                )
+            }
+
+            mediaList.add(videosUri.toString())
+        }*/
+
+
+
+
+
+        return mediaList
     }
 
 
@@ -198,7 +199,72 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun Photos(photos: List<String>, navController: NavController) {
         var textFieldState by remember { mutableStateOf("") }
-        Scaffold(topBar = {
+        val context = LocalContext.current
+        val images = mutableListOf<String>()
+        val videos = mutableListOf<String>()
+
+        for (photo in photos) {
+            val mimeType = getMimeType(context, Uri.parse(photo))
+            if (mimeType != null) {
+                if (mimeType.startsWith("image/")) {
+                    images.add(photo)
+                } else if (mimeType.startsWith("video/")) {
+                    videos.add(photo)
+                }
+            }
+        }
+
+        Scaffold(content = {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 100.dp, top = it.calculateTopPadding()),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(images) { imageUri ->
+                    AsyncImage(
+                        model = imageUri,
+                        contentDescription = "",
+                        modifier = Modifier
+                            .clickable {
+                                navController.navigate(
+                                    Screen.PicDetail.route + "/${
+                                        Uri.encode(
+                                            imageUri
+                                        )
+                                    }"
+                                )
+                            }
+                            .aspectRatio(1f)
+                            .size(120.dp),
+                        contentScale = ContentScale.Crop,
+                        placeholder = painterResource(id = R.drawable.ic_launcher_foreground)
+
+
+                    )
+                }
+                items(videos) { videoUri ->
+                    val exoPlayer = ExoPlayer.Builder(context).build()
+                    val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
+                    exoPlayer.setMediaItem(mediaItem)
+
+                    val playerView = StyledPlayerView(context)
+                    playerView.player = exoPlayer
+
+                    DisposableEffect(AndroidView(factory = { playerView })) {
+
+                        exoPlayer.prepare()
+                        exoPlayer.play()
+                        onDispose {
+                            exoPlayer.release()
+                        }
+
+                    }
+                }
+            }
+        }, topBar = {
             CenterAlignedTopAppBar(title = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -236,40 +302,24 @@ class MainActivity : ComponentActivity() {
                 }
 
             })
-        }) {
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = it.calculateTopPadding(), bottom = 100.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                items(photos) { photo ->
-                    AsyncImage(
-                        model = photo,
-                        contentDescription = "",
-                        modifier = Modifier
-                            .clickable {
-                                navController.navigate(
-                                    Screen.PicDetail.route + "/${
-                                        Uri.encode(
-                                            photo
-                                        )
-                                    }"
-                                )
-                            }
-                            .aspectRatio(1f)
-                            .size(120.dp),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
-            }
-        }
+        })
 
     }
 
+    @Composable
+    fun VideoPlayer(videoUri: Uri) {
+        val context = LocalContext.current
+        val player = remember { SimpleExoPlayer.Builder(context).build() }
+
+        val mediaItem = remember(videoUri) { MediaItem.fromUri(videoUri) }
+        player.setMediaItem(mediaItem)
+
+        StyledPlayerView(context)
+    }
+
+    fun getMimeType(context: Context, uri: Uri): String? {
+        return context.contentResolver.getType(uri)
+    }
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
@@ -293,7 +343,7 @@ class MainActivity : ComponentActivity() {
             }
 
             composable(Screen.VideoDetail.route) {
-                VideoDetail(navController = navController, videos = photosItems)
+                VideoDetail(navController = navController, photos = photosItems)
             }
 
         }
@@ -741,32 +791,67 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun VideoDetail(navController: NavController, videos: List<String>) {
+    fun VideoDetail(navController: NavController, photos: List<String>) {
         val context = LocalContext.current
-        val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+        val images = mutableListOf<String>()
+        val videos = mutableListOf<String>()
 
-        DisposableEffect(Unit) {
-            val mediaItem = if (videos.isNotEmpty()) {
-                MediaItem.fromUri(videos[0])
-            } else {
-                MediaItem.fromUri("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
-            }
-
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
-
-            onDispose {
-                exoPlayer.release()
+        for (photo in photos) {
+            val mimeType = getMimeType(context, Uri.parse(photo))
+            if (mimeType != null) {
+                if (mimeType.startsWith("image/")) {
+                    images.add(photo)
+                } else if (mimeType.startsWith("video/")) {
+                    videos.add(photo)
+                }
             }
         }
+        Scaffold(content = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 100.dp),
+                verticalArrangement = Arrangement.spacedBy(15.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                items(images) { imageUri ->
+                    //
+                }
+                items(videos) { videoUri ->
+                    val exoPlayer = remember {
+                        ExoPlayer.Builder(context)
+                            .build()
+                            .apply {
+                                val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
+                                setMediaItem(mediaItem)
+                                prepare()
+                            }
+                    }
 
-        val playerView = remember { StyledPlayerView(context) }
-        playerView.player = exoPlayer
+                    val playerView = remember { StyledPlayerView(context) }
+                    DisposableEffect(Unit) {
+                        playerView.player = exoPlayer
+                        onDispose {
+                            exoPlayer.release()
+                        }
+                    }
 
-        AndroidView(factory = { playerView })
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize().padding(bottom = it.calculateBottomPadding())
+                            .clickable {
+                                navController.navigate(Screen.VideoDetail.route + "/$videoUri")
+                            }
+                    ) {
+                        AndroidView(
+                            factory = { playerView },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
+        })
     }
-
 
     /*    @Composable
     fun VideoItem(videoUri: String) {
@@ -850,4 +935,3 @@ inline fun permissionGaranted(context: Context, permission: String, call: (Boole
         call.invoke(false)
     }
 }
-

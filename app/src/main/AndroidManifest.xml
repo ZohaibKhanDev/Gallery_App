@@ -37,6 +37,13 @@
                     android:scheme="http"
                     tools:ignore="AppLinkUrlError" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ALL_APPS"/>
+                <data android:host="video/*"
+                    android:scheme="http"
+                    tools:ignore="AppLinkUrlError" />
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
         </activity>
     </application>
 
