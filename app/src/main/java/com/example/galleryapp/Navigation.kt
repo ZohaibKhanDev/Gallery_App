@@ -50,4 +50,18 @@ sealed class Screen(
         selectedIcon = Icons.Filled.Explore,
         unSelectedIcon = Icons.Outlined.Explore
     )
+
+    object Fav : Screen(
+        "Fav",
+        "Fav",
+        selectedIcon = Icons.Filled.Explore,
+        unSelectedIcon = Icons.Outlined.Explore
+    )
+
+    object All : Screen(
+        "All",
+        "All",
+        selectedIcon = Icons.Filled.Explore,
+        unSelectedIcon = Icons.Outlined.Explore
+    )
 }

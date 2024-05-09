@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -41,11 +40,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -66,6 +67,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,26 +95,36 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.room.Room
 import coil.compose.AsyncImage
 import com.example.galleryapp.ui.theme.GalleryAppTheme
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
-import com.google.android.exoplayer2.SimpleExoPlayer
 import com.google.android.exoplayer2.ui.StyledPlayerView
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.FileOutputStream
+import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidLogger
+import org.koin.compose.koinInject
+import org.koin.core.context.startKoin
 import java.io.IOException
 import java.io.InputStream
 
 class MainActivity : ComponentActivity() {
+
+
     private var photosItems: List<String> by mutableStateOf(emptyList())
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        startKoin {
+            androidContext(this@MainActivity)
+            androidLogger()
+            modules(appModule)
+        }
         setContent {
+            val viewModel: MainViewModel = koinInject()
             GalleryAppTheme {
 
                 NavEntry()
@@ -150,11 +163,7 @@ class MainActivity : ComponentActivity() {
         )
         val contentResolver = context.contentResolver
         val cursor = contentResolver.query(
-            MediaStore.Files.getContentUri("external"),
-            projection,
-            null,
-            null,
-            null
+            MediaStore.Files.getContentUri("external"), projection, null, null, null
         )
 
         cursor?.use { cursor ->
@@ -162,8 +171,7 @@ class MainActivity : ComponentActivity() {
             while (cursor.moveToNext()) {
                 val mediaId = cursor.getLong(idColumn)
                 val mediaUri = ContentUris.withAppendedId(
-                    MediaStore.Files.getContentUri("external"),
-                    mediaId
+                    MediaStore.Files.getContentUri("external"), mediaId
                 )
                 mediaList.add((mediaUri).toString())
             }
@@ -198,6 +206,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @Composable
     fun Photos(photos: List<String>, navController: NavController) {
+
         var textFieldState by remember { mutableStateOf("") }
         val context = LocalContext.current
         val images = mutableListOf<String>()
@@ -224,8 +233,7 @@ class MainActivity : ComponentActivity() {
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 items(images) { imageUri ->
-                    AsyncImage(
-                        model = imageUri,
+                    AsyncImage(model = imageUri,
                         contentDescription = "",
                         modifier = Modifier
                             .clickable {
@@ -244,25 +252,38 @@ class MainActivity : ComponentActivity() {
 
 
                     )
-                }
-                items(videos) { videoUri ->
-                    val exoPlayer = ExoPlayer.Builder(context).build()
-                    val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
-                    exoPlayer.setMediaItem(mediaItem)
+                }/*items(videos) { videoUri ->
 
-                    val playerView = StyledPlayerView(context)
-                    playerView.player = exoPlayer
 
-                    DisposableEffect(AndroidView(factory = { playerView })) {
+                    val exoPlayer = remember {
+                        ExoPlayer.Builder(context)
+                            .build()
+                            .apply {
+                                val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
+                                setMediaItem(mediaItem)
+                                prepare()
+                            }
+                    }
 
-                        exoPlayer.prepare()
-                        exoPlayer.play()
+                    val playerView = remember { StyledPlayerView(context) }
+                    DisposableEffect(Unit) {
+                        playerView.player = exoPlayer
                         onDispose {
                             exoPlayer.release()
                         }
-
                     }
-                }
+
+                    Box(
+                        modifier = Modifier
+                            .clickable {
+                                navController.navigate(Screen.Photos.route + "/$videoUri")
+                            }
+                    ) {
+                        AndroidView(
+                            factory = { playerView },
+                        )
+                    }
+                }*/
             }
         }, topBar = {
             CenterAlignedTopAppBar(title = {
@@ -306,17 +327,6 @@ class MainActivity : ComponentActivity() {
 
     }
 
-    @Composable
-    fun VideoPlayer(videoUri: Uri) {
-        val context = LocalContext.current
-        val player = remember { SimpleExoPlayer.Builder(context).build() }
-
-        val mediaItem = remember(videoUri) { MediaItem.fromUri(videoUri) }
-        player.setMediaItem(mediaItem)
-
-        StyledPlayerView(context)
-    }
-
     fun getMimeType(context: Context, uri: Uri): String? {
         return context.contentResolver.getType(uri)
     }
@@ -344,6 +354,14 @@ class MainActivity : ComponentActivity() {
 
             composable(Screen.VideoDetail.route) {
                 VideoDetail(navController = navController, photos = photosItems)
+            }
+
+            composable(Screen.Fav.route) {
+                FavouriteScreen(navController)
+            }
+
+            composable(Screen.All.route) {
+                AllScreen(photos = photosItems, navController)
             }
 
         }
@@ -376,6 +394,123 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun AllScreen(photos: List<String>, navController: NavController) {
+        var textFieldState by remember { mutableStateOf("") }
+        val context = LocalContext.current
+        val images = mutableListOf<String>()
+        val videos = mutableListOf<String>()
+
+        for (photo in photos) {
+            val mimeType = getMimeType(context, Uri.parse(photo))
+            if (mimeType != null) {
+                if (mimeType.startsWith("image/")) {
+                    images.add(photo)
+                } else if (mimeType.startsWith("video/")) {
+                    videos.add(photo)
+                }
+            }
+        }
+
+        Scaffold(content = {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 100.dp, top = it.calculateTopPadding()),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(images) { imageUri ->
+                    AsyncImage(model = imageUri,
+                        contentDescription = "",
+                        modifier = Modifier
+                            .clickable {
+                                navController.navigate(
+                                    Screen.PicDetail.route + "/${
+                                        Uri.encode(
+                                            imageUri
+                                        )
+                                    }"
+                                )
+                            }
+                            .aspectRatio(1f)
+                            .size(120.dp),
+                        contentScale = ContentScale.Crop,
+                        placeholder = painterResource(id = R.drawable.ic_launcher_foreground)
+
+
+                    )
+                }
+                items(videos) { videoUri ->
+
+
+                    val exoPlayer = remember {
+                        ExoPlayer.Builder(context).build().apply {
+                            val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
+                            setMediaItem(mediaItem)
+                            prepare()
+                        }
+                    }
+
+                    val playerView = remember { StyledPlayerView(context) }
+                    DisposableEffect(Unit) {
+                        playerView.player = exoPlayer
+                        onDispose {
+                            exoPlayer.release()
+                        }
+                    }
+
+                    Box(modifier = Modifier.clickable {
+                        navController.navigate(Screen.Photos.route + "/$videoUri")
+                    }) {
+                        AndroidView(
+                            factory = { playerView },
+                        )
+                    }
+                }
+            }
+        }, topBar = {
+            CenterAlignedTopAppBar(title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextField(value = textFieldState, onValueChange = {
+                        textFieldState = it
+                    }, colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.LightGray.copy(alpha = 0.34F),
+                        unfocusedContainerColor = Color.LightGray.copy(alpha = 0.34F),
+                        focusedIndicatorColor = Color.White,
+                        unfocusedIndicatorColor = Color.White
+                    ), modifier = Modifier.height(50.dp), placeholder = {
+                        Text(text = "Search", fontSize = 15.sp)
+                    }, textStyle = TextStyle(
+                        fontSize = 15.sp
+                    ), shape = RoundedCornerShape(12.dp), leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "",
+                            modifier = Modifier.size(23.dp)
+                        )
+                    })
+
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "",
+                        modifier = Modifier
+
+                            .align(Alignment.CenterVertically)
+                            .padding(start = 22.dp)
+                            .size(30.dp)
+                    )
+                }
+
+            })
+        })
+    }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -387,7 +522,46 @@ class MainActivity : ComponentActivity() {
         }
         val wallpaperManager = WallpaperManager.getInstance(context)
         val coroutineScope = rememberCoroutineScope()
+        /*
+                val viewModel: MainViewModel = koinInject()
+        */
 
+        val db = Room.databaseBuilder(
+            applicationContext,
+            DataBase::class.java,
+            "demo.db"
+        ).allowMainThreadQueries().build()
+        val repository = remember {
+            Repository(db)
+        }
+        val viewModel = remember {
+            MainViewModel(repository)
+        }
+        var favData by remember {
+            mutableStateOf<List<Fav>?>(null)
+        }
+        var isFav by remember {
+            mutableStateOf(false)
+        }
+        LaunchedEffect(key1 = isFav) {
+            viewModel.getAllFav()
+        }
+        val state by viewModel.allFav.collectAsState()
+        when (state) {
+            is ResultState.Error -> {
+                val error = (state as ResultState.Error).error
+                Text(text = error.toString())
+            }
+
+            ResultState.Loading -> {
+
+            }
+
+            is ResultState.Success -> {
+                val success = (state as ResultState.Success).response
+                favData = success
+            }
+        }
         Scaffold(topBar = {
             TopAppBar(title = {
                 Icon(imageVector = Icons.Default.ArrowBack,
@@ -413,8 +587,8 @@ class MainActivity : ComponentActivity() {
                 AsyncImage(
                     model = pic,
                     contentDescription = "",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.aspectRatio(1f)
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier.aspectRatio(1f).fillMaxSize()
                 )
 
 
@@ -465,24 +639,53 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    if (isFav) {
+                        Column(
+                            modifier = Modifier.clickable {
+                                isFav = !isFav
 
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FavoriteBorder,
-                            contentDescription = "",
-                            tint = Color.White
-                        )
+                            },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Favorite,
+                                contentDescription = "",
+                                tint = Color.White
+                            )
 
-                        Text(
-                            text = "Favourite",
-                            fontSize = 9.sp,
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                            Text(
+                                text = "Favourite",
+                                fontSize = 9.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.clickable {
+                                isFav = !isFav
+                                val fav = pic?.let { it1 -> Fav(null, it1, null.toString()) }
+                                fav?.let { it1 -> viewModel.Insert(it1) }
+                            },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FavoriteBorder,
+                                contentDescription = "",
+                                tint = Color.White
+                            )
+
+                            Text(
+                                text = "Favourite",
+                                fontSize = 9.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
+
 
                     Column(
                         horizontalAlignment = Alignment.End,
@@ -709,7 +912,7 @@ class MainActivity : ComponentActivity() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
-                        modifier = Modifier.clickable { navController.navigate(Screen.Photos.route) },
+                        modifier = Modifier.clickable { navController.navigate(Screen.All.route) },
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -724,8 +927,7 @@ class MainActivity : ComponentActivity() {
                             Image(
                                 painter = painterResource(id = R.drawable.folder),
                                 contentDescription = "",
-                                modifier = Modifier
-                                    .fillMaxSize(),
+                                modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
                         }
@@ -749,8 +951,7 @@ class MainActivity : ComponentActivity() {
                             Image(
                                 painter = painterResource(id = R.drawable.folder),
                                 contentDescription = "",
-                                modifier = Modifier
-                                    .fillMaxSize(),
+                                modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
 
@@ -761,6 +962,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     Column(
+                        modifier = Modifier.clickable { navController.navigate(Screen.Fav.route) },
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -775,8 +977,8 @@ class MainActivity : ComponentActivity() {
                             Image(
                                 painter = painterResource(id = R.drawable.folder),
                                 contentDescription = "",
-                                modifier = Modifier
-                                    .fillMaxSize(), contentScale = ContentScale.Crop
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
                         }
 
@@ -790,6 +992,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @Composable
     fun VideoDetail(navController: NavController, photos: List<String>) {
         val context = LocalContext.current
@@ -807,25 +1010,30 @@ class MainActivity : ComponentActivity() {
             }
         }
         Scaffold(content = {
+
+            Icon(imageVector = Icons.Default.ArrowBack,
+                contentDescription = "",
+                modifier = Modifier
+                    .clickable { navController.popBackStack() }
+                    .padding(top = 34.dp, start = 10.dp)
+                    .size(30.dp)
+                    .background(Color.Black.copy(alpha = 0.20f))
+                    .clip(CircleShape))
+
             LazyColumn(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 100.dp),
-                verticalArrangement = Arrangement.spacedBy(15.dp),
+                    .padding(top = 75.dp, bottom = it.calculateBottomPadding())
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                items(images) { imageUri ->
-                    //
-                }
+            ) {
                 items(videos) { videoUri ->
                     val exoPlayer = remember {
-                        ExoPlayer.Builder(context)
-                            .build()
-                            .apply {
-                                val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
-                                setMediaItem(mediaItem)
-                                prepare()
-                            }
+                        ExoPlayer.Builder(context).build().apply {
+                            val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
+                            setMediaItem(mediaItem)
+                            prepare()
+                        }
                     }
 
                     val playerView = remember { StyledPlayerView(context) }
@@ -836,16 +1044,14 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize().padding(bottom = it.calculateBottomPadding())
-                            .clickable {
-                                navController.navigate(Screen.VideoDetail.route + "/$videoUri")
-                            }
-                    ) {
+                    Box(modifier = Modifier.clickable {
+                        navController.navigate(Screen.VideoDetail.route + "/$videoUri")
+                    }) {
                         AndroidView(
                             factory = { playerView },
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
                         )
                     }
                 }
@@ -853,68 +1059,85 @@ class MainActivity : ComponentActivity() {
         })
     }
 
-    /*    @Composable
-    fun VideoItem(videoUri: String) {
-        var isPlaying by remember { mutableStateOf(false) }
-        val context = LocalContext.current
+    @Composable
+    fun FavouriteScreen(navController: NavController) {
+        /*
+                val viewModel: MainViewModel = koinInject()
 
-        Column(
+        */
+        val db = Room.databaseBuilder(
+            applicationContext,
+            DataBase::class.java,
+            "demo.db"
+        ).allowMainThreadQueries().build()
+        val repository = remember {
+            Repository(db)
+        }
+        val viewModel = remember {
+            MainViewModel(repository)
+        }
+
+        var favData by remember {
+            mutableStateOf<List<Fav>?>(null)
+        }
+        val isFav by remember {
+            mutableStateOf(false)
+        }
+        LaunchedEffect(key1 = isFav) {
+            viewModel.getAllFav()
+        }
+        val state by viewModel.allFav.collectAsState()
+        when (state) {
+            is ResultState.Error -> {
+                val error = (state as ResultState.Error).error
+                Text(text = error.toString())
+            }
+
+            ResultState.Loading -> {
+
+            }
+
+            is ResultState.Success -> {
+                val success = (state as ResultState.Success).response
+                favData = success
+            }
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    isPlaying = !isPlaying
-                }
+                .fillMaxSize()
+                .padding(top = 60.dp, bottom = 100.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            val uri = videoUri.toUri()
-            val thumbnailUri = getThumbnailUri(context, uri)
-            Image(
-                painter = painterResource(id = com.google.android.exoplayer2.R.drawable.exo_icon_previous),
-                contentDescription = "Video Thumbnail",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 50.dp).size(20.dp),
-                contentScale = ContentScale.Crop
-            )
-            if (isPlaying) {
-                val exoPlayer = SimpleExoPlayer.Builder(context).build()
-                val mediaItem = MediaItem.fromUri(uri)
-                exoPlayer.setMediaItem(mediaItem)
-
-                val playerView = StyledPlayerView(context)
-                playerView.player = exoPlayer
-
-                DisposableEffect(AndroidView(factory = { playerView })) {
-
-                    exoPlayer.prepare()
-                    exoPlayer.play()
-                    onDispose {
-                        exoPlayer.release()
-                    }
-
+            favData?.let { fav ->
+                items(fav) { Favourite ->
+                    FavItem(fav = Favourite,navController)
                 }
             }
         }
-    }*/
 
-    fun getThumbnailUri(context: Context, videoUri: Uri): Uri? {
-        val retriever = MediaMetadataRetriever()
-        try {
-            retriever.setDataSource(context, videoUri)
+    }
 
-            val bitmap = retriever.getFrameAtTime()
+    @Composable
+    fun FavItem(fav: Fav, navController: NavController) {
 
-            val thumbnailFile = File(context.cacheDir, "thumbnail.jpg")
-            val outputStream = FileOutputStream(thumbnailFile)
-            bitmap?.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
-            outputStream.close()
 
-            return Uri.fromFile(thumbnailFile)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            retriever.release()
-        }
-        return null
+        AsyncImage(
+            model = fav.image,
+            contentDescription = "",
+            modifier = Modifier
+                .aspectRatio(1f)
+                .clickable {  navController.navigate(
+                    Screen.PicDetail.route + "/${
+                        Uri.encode(
+                            fav.image
+                        )
+                    }"
+                ) },
+            contentScale = ContentScale.Crop
+            )
     }
 
     @Composable

@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    alias(libs.plugins.kotlinxSerialization)
+    id("kotlin-kapt")
 }
 
 android {
@@ -78,4 +80,20 @@ dependencies {
     implementation ("androidx.media3:media3-exoplayer-hls:1.3.1")
     implementation("com.google.android.exoplayer:exoplayer:2.19.1")
     implementation("androidx.compose.material:material-icons-extended")
+    val nav_version = "2.7.7"
+    implementation("androidx.navigation:navigation-compose:$nav_version")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("androidx.compose.material:material-icons-extended:1.6.3")
+    // Room
+    val room_version = "2.6.1"
+
+    implementation("androidx.room:room-runtime:$room_version")
+    kapt ("androidx.room:room-compiler:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    implementation ("androidx.core:core-splashscreen:1.0.0")
+    implementation(project.dependencies.platform("io.insert-koin:koin-bom:3.5.4"))
+    implementation("io.insert-koin:koin-core")
+    implementation("io.insert-koin:koin-android")
+    implementation("io.insert-koin:koin-compose")
+    implementation("io.insert-koin:koin-annotations:1.3.1")
 }
