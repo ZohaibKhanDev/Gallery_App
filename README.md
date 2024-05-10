@@ -1,7 +1,7 @@
 # Gallery App
 ## Overview
 
-
+Our Gallery App is more than just a platform to view your photos – it's a celebration of your memories. 
 
 
 ## 🚀 Key Features
