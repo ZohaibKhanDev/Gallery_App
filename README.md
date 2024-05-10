@@ -1,7 +1,7 @@
 # Gallery App
 ## Overview
 
-Our Gallery App is more than just a platform to view your photos – it's a celebration of your memories. Designed with a passion for simplicity and elegance, our app offers a seamless experience for exploring your digital gallery. Whether you're a professional photographer or a casual enthusiast, our intuitive interface makes it easy to navigate through your cherished moments. With a commitment to privacy and security, your memories are safeguarded within our app. Join us on this journey of preserving and reliving the moments that matter most. Welcome to our Gallery App – where every image tells a story
+Our Gallery App is more than just a platform to view your photos – it's a celebration of your memories. Designed with a passion for simplicity and elegance, our app offers a seamless experience for exploring your digital gallery. Whether you're a professional photographer or a casual enthusiast, our intuitive interface makes it easy to navigate through your cherished moments. With a commitment to privacy and security, your memories are safeguarded within our app. Join us on this journey of preserving and reliving the moments that matter most. Welcome to our Gallery App – where every image tells a story  
 
 
 ## 🚀 Key Features
