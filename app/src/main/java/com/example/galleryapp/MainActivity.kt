@@ -118,13 +118,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        startKoin {
-            androidContext(this@MainActivity)
-            androidLogger()
-            modules(appModule)
-        }
         setContent {
-            val viewModel: MainViewModel = koinInject()
             GalleryAppTheme {
 
                 NavEntry()
@@ -178,24 +172,6 @@ class MainActivity : ComponentActivity() {
 
 
         }
-
-
-        /*cursorVideos?.use {
-            val idColumVideo = cursor?.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-            val videosId = idColumVideo?.let { cursor.getLong(it) }
-            val videosUri = videosId?.let {
-                ContentUris.withAppendedId(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    it
-                )
-            }
-
-            mediaList.add(videosUri.toString())
-        }*/
-
-
-
-
 
         return mediaList
     }
@@ -252,38 +228,7 @@ class MainActivity : ComponentActivity() {
 
 
                     )
-                }/*items(videos) { videoUri ->
-
-
-                    val exoPlayer = remember {
-                        ExoPlayer.Builder(context)
-                            .build()
-                            .apply {
-                                val mediaItem = MediaItem.fromUri(Uri.parse(videoUri))
-                                setMediaItem(mediaItem)
-                                prepare()
-                            }
-                    }
-
-                    val playerView = remember { StyledPlayerView(context) }
-                    DisposableEffect(Unit) {
-                        playerView.player = exoPlayer
-                        onDispose {
-                            exoPlayer.release()
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clickable {
-                                navController.navigate(Screen.Photos.route + "/$videoUri")
-                            }
-                    ) {
-                        AndroidView(
-                            factory = { playerView },
-                        )
-                    }
-                }*/
+                }
             }
         }, topBar = {
             CenterAlignedTopAppBar(title = {
